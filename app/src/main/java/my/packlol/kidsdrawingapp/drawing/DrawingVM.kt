@@ -121,6 +121,9 @@ class DrawingVM(
                 }
                 )
             }
+            DrawingAction.ClearDrawing -> {
+                lineData.emit(emptyList())
+            }
         }
     }
 

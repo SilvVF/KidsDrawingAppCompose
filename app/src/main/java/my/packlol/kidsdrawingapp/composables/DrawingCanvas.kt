@@ -14,6 +14,18 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import my.packlol.kidsdrawingapp.data.DragData
 import my.packlol.kidsdrawingapp.drawing.DrawingAction
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.contract
+
+@Suppress("BanInlineOptIn")
+@OptIn(ExperimentalContracts::class, ExperimentalContracts::class)
+inline fun <T> List<T>.fastForEach(action: (T) -> Unit) {
+    contract { callsInPlace(action) }
+    for (index in indices) {
+        val item = get(index)
+        action(item)
+    }
+}
 
 @Composable
 fun DrawingCanvas(
@@ -56,7 +68,7 @@ fun DrawingCanvas(
                 )
             },
     ) {
-        dragData.forEach { data ->
+        dragData.fastForEach { data ->
             if (data.circle) {
                 drawCircle(
                     radius = data.width,

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Redo
@@ -77,6 +78,14 @@ fun DrawingBottomBar(
         ) {
             Icon(
                 imageVector = Icons.Default.Save,
+                contentDescription = null
+            )
+        }
+        IconButton(
+            onClick = { actionSink(DrawingAction.ClearDrawing)  }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Clear,
                 contentDescription = null
             )
         }

@@ -31,5 +31,7 @@ sealed interface DrawingAction {
         val width: Float
     ): DrawingAction
 
+    object ClearDrawing: DrawingAction
+
     data class SaveImage(val view: View, val clipHeight: Int): DrawingAction
 }
