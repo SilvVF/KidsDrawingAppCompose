@@ -1,5 +1,6 @@
 package my.packlol.kidsdrawingapp.drawing
 
+import android.view.View
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -21,9 +22,9 @@ class DrawingVM(
 
     private val deletedLine = Stack<DragData>()
 
-    private val lineData = MutableStateFlow<List<DragData>>(listOf())
+    private val mutableDragData = MutableStateFlow<List<DragData>>(emptyList())
 
-    val dragData = lineData
+    val dragData = mutableDragData
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(),
@@ -32,99 +33,123 @@ class DrawingVM(
 
     fun handleAction(action: DrawingAction) = viewModelScope.launch {
         when(action) {
-            is DrawingAction.SaveImage -> {
-                    mutableEvents.send(
-                        DrawingEvent.Message("Starting download")
-                    )
-                    runCatching {
-                        imageSaver.saveImage(
-                            view = action.view,
-                            height = action.clipHeight
-                        )
-                    }
-                        .onSuccess {
-                            mutableEvents.send(
-                                DrawingEvent.Message("Finished dowloading")
-                            )
-                        }
-                        .onFailure {
-                            mutableEvents.send(
-                                DrawingEvent.Error("Failed to download ${it.localizedMessage}")
-                            )
-                }
-            }
-            is DrawingAction.OnDrag -> {
-                updateDragData(
-                    action.start,
-                    action.end,
-                    action.color,
-                    action.width
-                )
-            }
-            DrawingAction.Redo -> {
-                    deletedLine.takeIf { it.isNotEmpty() }
-                        ?.pop()
-                        ?.let { data ->
-                            lineData.getAndUpdate {
-                                it + data
-                            }
-                        }
-                        ?: mutableEvents.send(
-                            DrawingEvent.Error("no lines to replace")
-                        )
-            }
-            DrawingAction.Undo -> {
-                    lineData.getAndUpdate { data ->
-                        if (data.isNotEmpty()) {
-                            deletedLine.push(data.last())
-                            data.dropLast(1)
-                        } else {
-                            mutableEvents.send(
-                                DrawingEvent.Error("no lines to remove")
-                            )
-                            data
-                        }
-                }
-            }
+            is DrawingAction.SaveImage -> saveImage(action.view, action.clipHeight)
+            is DrawingAction.OnDrag -> updateDragData(
+                start = action.start,
+                end = action.end,
+                color = action.color,
+                width = action.width
+            )
+            DrawingAction.Redo -> redo()
+            DrawingAction.Undo -> undo()
             DrawingAction.DragEnded -> Unit
-            is DrawingAction.DragStarted -> {
-                lineData.emit(
-                    buildList {
-                        addAll(lineData.value)
-                        add(
-                            DragData(
-                                Path().apply {
-                                   moveTo(action.start.x, action.start.y)
-                                },
-                                action.color,
-                                action.width,
-                                false,
-                                action.start
-                            )
-                        )
-                    }
-                )
-            }
-            is DrawingAction.OnTap -> {
-                lineData.emit(
-                    buildList {
-                        addAll(lineData.value)
-                        add(
-                            DragData(
-                                circle = true,
-                                start = action.offset,
-                                path = Path(),
-                                color = action.color,
-                                width = action.width
-                            )
-                        )
-                }
-                )
-            }
+            is DrawingAction.DragStarted -> dragStarted(
+                start = action.start,
+                color = action.color,
+                width = action.width
+            )
+            is DrawingAction.OnTap -> onTap(
+                location = action.offset,
+                color = action.color,
+                width = action.width
+            )
             DrawingAction.ClearDrawing -> {
-                lineData.emit(emptyList())
+                mutableDragData.emit(emptyList())
             }
         }
+    }
+
+    private fun undo() = viewModelScope.launch {
+        mutableDragData.getAndUpdate { data ->
+            if (data.isNotEmpty()) {
+                deletedLine.push(data.last())
+                data.dropLast(1)
+            } else {
+                mutableEvents.send(
+                    DrawingEvent.Error("no lines to remove")
+                )
+                data
+            }
+        }
+    }
+
+    private fun redo() = viewModelScope.launch {
+        deletedLine.takeIf { it.isNotEmpty() }
+            ?.pop()
+            ?.let { data ->
+                mutableDragData.getAndUpdate {
+                    it + data
+                }
+            }
+            ?: mutableEvents.send(
+                DrawingEvent.Error("no lines to replace")
+            )
+    }
+
+    private fun onTap(
+        location: Offset,
+        color: Color,
+        width: Float
+    ) = viewModelScope.launch {
+        mutableDragData.emit(
+            buildList {
+                addAll(mutableDragData.value)
+                add(
+                    DragData(
+                        circle = true,
+                        start = location,
+                        path = Path(),
+                        color = color,
+                        width = width
+                    )
+                )
+            }
+        )
+    }
+
+    private fun dragStarted(
+        start: Offset,
+        color: Color,
+        width: Float
+    ) = viewModelScope.launch {
+        mutableDragData.emit(
+            buildList {
+                addAll(mutableDragData.value)
+                add(
+                    DragData(
+                        Path().apply {
+                            moveTo(start.x, start.y)
+                        },
+                        color, width, false, start
+                    )
+                )
+            }
+        )
+    }
+
+    private fun saveImage(
+        view: View,
+        height: Int
+    ) = viewModelScope.launch {
+        mutableEvents.send(
+            DrawingEvent.Message("Starting download")
+        )
+        runCatching {
+            imageSaver.saveImage(
+                view = view,
+                height = height
+            )
+        }
+            .onSuccess {
+                mutableEvents.send(
+                    DrawingEvent.Message("Finished dowloading")
+                )
+            }
+            .onFailure {
+                mutableEvents.send(
+                    DrawingEvent.Error("Failed to download ${it.localizedMessage}")
+                )
+            }
     }
 
     private suspend fun updateDragData(
@@ -133,8 +158,8 @@ class DrawingVM(
         color: Color,
         width: Float
     )  {
-        val data = lineData.value
-        lineData.emit(
+        val data = mutableDragData.value
+        mutableDragData.emit(
             buildList {
                 if (data.size > 1) {
                     addAll(data.subList(0, data.lastIndex))
